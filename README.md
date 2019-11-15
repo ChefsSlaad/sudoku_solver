@@ -4,12 +4,12 @@ sudoku solver meant to solve sudoku puzzles. I was looking for a way to do a few
 
 usage:
 
-from sudoku_solver import sudokutable
+    from sudoku_solver import sudokutable
 
-table = sudokutable()
-# a table is the 9 rows stuck one afteranother as a string. unknown numbers are a . 
-#
-table.parse(".4.17...6......9..3..8..4152.4.38..9.........7..59.2.3418..6..7..3......5...81.3.")
-print(table)
-table.solve()
-print(table)
+    table = sudokutable()
+    # a table is the 9 rows stuck one afteranother as a string. unknown numbers are a . 
+   
+    table.parse(".4.17...6......9..3..8..4152.4.38..9.........7..59.2.3418..6..7..3......5...81.3.")
+    print(table)
+    table.solve()
+    print(table)
