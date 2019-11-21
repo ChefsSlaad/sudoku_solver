@@ -12,9 +12,8 @@ class sudoku_image:
         self.res_rgb = None # the final output, in rgb
 
         self.__pre_processing__()
-        self.grid_points = cv.bitwise_and(self.__find_verticals__(),self.__find_horizontals__())
-
-
+        grid_point_img = cv.bitwise_and(self.__find_verticals__(),self.__find_horizontals__())
+        self.gridpoints = self.__find_gridpoints__(grid_point_img)
     def __pre_processing__(self):
         img =       cv.GaussianBlur(self.original, (5, 5), 0) #blur img to remove noise
         gray =      cv.cvtColor(img, cv.COLOR_BGR2GRAY) # convert to greyscale for easy processing
@@ -82,6 +81,9 @@ class sudoku_image:
 
         close = cv.morphologyEx(close,cv.MORPH_DILATE,None,iterations = 2)
         return close.copy()
+
+    def __find_gridpoints__(self):
+        
 
 if __name__ == '__main__':
     my_sudoku = sudoku_image('sudoku_images/test1.jpg')
