@@ -2,7 +2,7 @@ import numpy as np
 import cv2 as cv
 from statistics import mean
 import pytesseract
-From PIL import Image
+from PIL import Image
 
 
 # https://stackoverflow.com/questions/59182827/how-to-get-the-cells-of-a-sudoku-grid-with-opencv
@@ -19,7 +19,8 @@ class sudoku_image:
 
     def __init__(self, image = None):
         self.original =       cv.imread(image)
-        self.image =          cv.cvtColor(self.original, cv.COLOR_BGR2RGB)
+        self.image =          cv.GaussianBlur(self.original, (5, 5), 0)
+        self.image =          cv.cvtColor(self.image, cv.COLOR_BGR2RGB)
         self.mask  =          None # the mask we will use to show only the relevant bits
         self.result =         None # the final output, in greyscale
         self.contour =        None # the four cardinal points of the sudoku
@@ -169,7 +170,7 @@ class sudoku_image:
         cell_size = int(min( (max(self.contour[:,0])-min(self.contour[:,0]))//9,
                     (max(self.contour[:,1])-min(self.contour[:,1]))//9))
 
-        print('cell_size =', cell_size)
+#        print('cell_size =', cell_size)
 
         output = np.zeros((cell_size*9,cell_size*9,3),"float32")
 
@@ -237,11 +238,20 @@ class sudoku_image:
         cv.waitKey(0)
         cv.destroyAllWindows()
 
-    
+    def cells_to_numbers(self, images = None):
+        if images == None:
+            images = self.cell_images
+
+        output = []
+        for img in images:
+            val = pytesseract.image_to_string(img)
+            if val == '':
+                val = '.'
+            output.append(val)
+        print(output)
 
 def scale_img(image, pct):
     return cv.resize(image, (int(image.shape[1]*pct), int(image.shape[0]*pct)))
-
 
 def pretty_print(ugly_array):
     ys,xs,d = ugly_array.shape
@@ -255,18 +265,35 @@ def pretty_print(ugly_array):
 def test_image(image):
     try:
         sudoku = sudoku_image(image)
+#        sudoku.cells_to_numbers()
         sudoku.show_image()
     except:
-        pass
+        print('error')
 
-
-if __name__ == '__main__':
+def loop_images():
     import os
     path = '/home/marc/projects/sudoku_solver/sudoku_images/'
-#    s = sudoku_image('/home/marc/projects/sudoku_solver/sudoku_images/IMG_20191115_074223.jpg')
-#    s.show_image()
-
-    for f in os.listdir(path):
+    files = (f for f in os.listdir(path) if f.endswith('.jpg') )
+    for f in files:
         file_str = path+f
         print('attempting to open', file_str)
         test_image(file_str)
+
+
+def exportcells():
+    import os
+    path = '/home/marc/projects/sudoku_solver/sudoku_images/'
+    cellPath = '/home/marc/projects/sudoku_solver/sudoku_images/cell_images/'
+    files = (f for f in os.listdir(path) if f.endswith('.jpg'))
+
+    for file in files:
+        print('processing', file)
+        s = sudoku_image(path+file)
+        f_name = file[:-4]
+        for i, img in enumerate(s.cell_images):
+            filename = '{}cell{:0>2}.jpg'.format(f_name, i)
+            cv.imwrite(cellPath+filename,img)
+
+if __name__ == '__main__':
+#    loop_images()
+    exportcells()
