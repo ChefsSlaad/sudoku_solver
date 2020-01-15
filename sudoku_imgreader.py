@@ -20,7 +20,6 @@ class sudoku_image:
     def __init__(self, image = None):
         self.original =       cv.imread(image)
         self.image =          cv.GaussianBlur(self.original, (5, 5), 0)
-        self.image =          cv.cvtColor(self.image, cv.COLOR_BGR2RGB)
         self.mask  =          None # the mask we will use to show only the relevant bits
         self.result =         None # the final output, in greyscale
         self.contour =        None # the four cardinal points of the sudoku
@@ -28,9 +27,12 @@ class sudoku_image:
 
         # populate the above parameters
         self.__pre_processing__()
+        self.__process_img__()
         self.grid_point_img = cv.bitwise_and(self.__find_verticals__(),self.__find_horizontals__())
         self.warped_grid =    self.__find_gridpoints__(self.grid_point_img)
         self.cell_images = self.__restore_warp__()
+
+
 
 
     def __pre_processing__(self):
@@ -69,6 +71,9 @@ class sudoku_image:
         cv.drawContours(self.mask,[best_cnt],0,0,2)
 
         self.result = cv.bitwise_and(image, self.mask)
+
+    def __process_img__(self):
+        pass
 
     def __find_verticals__(self):
         kernelx = cv.getStructuringElement(cv.MORPH_RECT,(2,10))
@@ -225,7 +230,6 @@ class sudoku_image:
         y_size,x_size,c  = images[0].shape
 
         new_image = np.zeros((y_size*9,x_size*9,c), dtype = "uint8" )
-#        print(constructed_image.shape)
         for i, img in enumerate(images):
             y, x = divmod(i,9)
             new_image[y*y_size:(y+1)*y_size, x*x_size:(x+1)*x_size,:] = img
@@ -242,13 +246,58 @@ class sudoku_image:
         if images == None:
             images = self.cell_images
 
-        output = []
-        for img in images:
-            val = pytesseract.image_to_string(img)
-            if val == '':
-                val = '.'
-            output.append(val)
-        print(output)
+        #load and create the model
+        path = '/home/marc/projects/sudoku_solver/sudoku_images/'
+        sampleData = 'generalsamples.data'
+        responseData = 'generalresponses.data'
+
+        sudoku_numbers = []
+
+        samples = np.loadtxt(path+sampleData,np.float32)
+        responses = np.loadtxt(path+responseData,np.float32)
+        responses = responses.reshape((responses.size,1))
+
+        model = cv.ml.KNearest_create()
+        model.train(samples, cv.ml.ROW_SAMPLE, responses)
+
+        for i, img in enumerate(images):
+            #if no number is found, use '.' (to mark an empty cell)
+#            cv.imshow('image', img)
+#            cv.waitKey(0)
+#            cv.destroyAllWindows()
+
+            string = '.'
+
+            # pre-processing
+            grey = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+            blur = cv.GaussianBlur(grey,(5,5),0)
+            thresh = cv.adaptiveThreshold(blur,255,1,1,11,2)
+
+            # find the contours
+            contours, _ = cv.findContours(thresh,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE)
+
+            for cnt in contours:
+                [x,y,w,h] = cv.boundingRect(cnt)
+                # potential optimization: turn these criteria into variables...
+                # n.b. area of smallest digit, 1, is aprox 700 pixels
+
+                if cv.contourArea(cnt)>500 and w < 100:
+                    roi = thresh[y:y+h,x:x+w]
+                    roismall = cv.resize(roi,(10,10))
+                    roismall = roismall.reshape((1,100))
+                    roismall = np.float32(roismall)
+                    retval, results, neigh_resp, dists = model.findNearest(roismall, k = 1)
+                    string = str(int((results[0][0])))
+
+                    cv.rectangle(img, (x,y), (x+w, y+h),(0,255,0), 3)
+#                    cv.imshow('image', img)
+#                    cv.waitKey(0)
+#                    cv.destroyAllWindows()
+
+            print('cell', i, 'value', string)
+
+            sudoku_numbers.append(string)
+        print(''.join(sudoku_numbers))
 
 def scale_img(image, pct):
     return cv.resize(image, (int(image.shape[1]*pct), int(image.shape[0]*pct)))
@@ -263,17 +312,19 @@ def pretty_print(ugly_array):
         print(print_str)
 
 def test_image(image):
-    try:
-        sudoku = sudoku_image(image)
-#        sudoku.cells_to_numbers()
-        sudoku.show_image()
-    except:
-        print('error')
+    sudoku = sudoku_image(image)
+#    for cell in sudoku.cell_images:
+#        cv.imshow('cell', cell)
+#        cv.waitKey(0)
+#        cv.destroyAllWindows()
+    sudoku.cells_to_numbers()
+    sudoku.show_image()
 
 def loop_images():
     import os
     path = '/home/marc/projects/sudoku_solver/sudoku_images/'
-    files = (f for f in os.listdir(path) if f.endswith('.jpg') )
+    files = [f for f in os.listdir(path) if f.endswith('.jpg') ]
+    files =sorted(files)
     for f in files:
         file_str = path+f
         print('attempting to open', file_str)
@@ -294,6 +345,8 @@ def exportcells():
             filename = '{}cell{:0>2}.jpg'.format(f_name, i)
             cv.imwrite(cellPath+filename,img)
 
+
 if __name__ == '__main__':
-#    loop_images()
-    exportcells()
+    loop_images()
+#    exportcells()
+#    train_digits()

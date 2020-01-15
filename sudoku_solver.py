@@ -1,19 +1,14 @@
 from copy import copy, deepcopy
 
-rows = "ABCDEFGHI"
-cols = "123456789"
-vals = {1,2,3,4,5,6,7,8,9}
-groups = ['row', 'column', 'cluster']
 
-class tablecell:
+class sudokuCell:
 
     # pos is noted as "A2" = 1st row , 2nd value
-    def __init__(self, pos, values=vals):
+    def __init__(self, pos ):
         self.pos = pos
-        self.row = rows.index(pos[0])
+        self.row = "ABCDEFGHI".index(pos[0])
         self.column = int(pos[1])-1
-        self.values = set(values)
-
+        self.values = {1,2,3,4,5,6,7,8,9}
 
         self.cluster = self.column//3 + 3*(self.row//3)
 
@@ -30,6 +25,10 @@ class tablecell:
                              r = self.row, c = self.column, cluster = self.cluster)
 
     def strike(self, p):
+        """ strike checks if a value can leaglly be discarded from the list of possibles
+            values in that cell.
+        """
+
         if len(self.values) == 1 and p in self.values:
             return False
         else:
@@ -52,11 +51,17 @@ class sudokutable:
     #
     # set of 81 cells
 
-    def __init__(self, rows = rows, cols = 9):
+    def __init__(self, rows = "ABCDEFGHI", cols = "123456789"):
+        """
+        Initiate the table. create a 9x9 grid and populate each cell
+        with a set of {1-9}.
+        add an id to each cell as well in the form of A1, C5, etc,
+        cells are also part of a list whih can be searched
+        """
         self.cells = []
         for r in rows:
-            for c in range(1, cols + 1):
-                self.__add_cell(tablecell(r+str(c)))
+            for c in cols:
+                self.cells.append(sudokuCell(r+c))
 
     def __iter__(self): return iter(self.cells)
 
@@ -69,6 +74,7 @@ class sudokutable:
     def __str__(self):
         '''returns a sudoku table in readable format'''
         result = ''
+        i = 0
         for r in range(9):
             if r == 0:
                 result+= '  012 345 678' + '\n'
@@ -79,14 +85,10 @@ class sudokutable:
                     result += str(r)
                 if c%3 == 0:
                     result += ' ' #insert the blank column after every 3 columns
-                result += self[rows[r]+cols[c]].__str__()
+                result += self[i].__str__()
+                i += 1
             result += '\n'
         return result
-
-    def __add_cell(self, cell):
-        '''internal function that adds a cell to the internal list of cells in
-           the sudoky table'''
-        self.cells.append(cell)
 
     def get_set(self, cell, group='all'):
         '''get_set returns all the neigbours of a cell but not the cell itself
@@ -121,13 +123,16 @@ class sudokutable:
                 5...81.3.
             is equivalent to
             .4.17...6......9..3..8..4152.4.38..9.........7..59.2.3418..6..7..3......5...81.3.
-                '''
-        i = 0
-        for c in grid:
-            if c in '0123456789.': # first check if the value is a digit or period
-                if c in '123456789': # only set if the value is a digit between 1 and 9
-                    self.set_value(self[i],int(c))
-                i += 1
+            '''
+        legalvals = '0123456789.'
+        if len(grid) != 81:
+            raise ValueError("the number of cells should be exactly 81")
+        if not all(c in legalvals for c in grid):
+            raise ValueError("the input may only contain digits between 1 and 9 or .")
+
+        for i, c in enumerate(grid):
+            if c in "123456789":
+                self.set_value(self[i],int(c))
 
     def set_value(self, cell, value):
         '''set_value sets the value of a cell and strikes  that value from the
@@ -135,12 +140,12 @@ class sudokutable:
            column. If a value cannot be set (because it contradicts an earlier
            value) it returns false. Otherwise it returns true
         '''
-        remaining = copy(vals) # use copy to keep the original list intact
+        remaining = {1,2,3,4,5,6,7,8,9} # use copy to keep the original list intact
         remaining.discard(value)
-        if all( c.strike(value) for c in self.get_set(cell)):
-            if all(cell.strike(v) for v in remaining):
-                return True
-        else: return False
+        set_strike = all( c.strike(value) for c in self.get_set(cell))
+        cell_strike = all(cell.strike(v) for v in remaining)
+
+        return cell_strike and set_strike
 
     def uniques(self):
         ''' loop through all unsolved cells untill either the sudoku has been
@@ -161,7 +166,7 @@ class sudokutable:
             solved_new = False
             # this is the main loop
             for cell in (c for c in self if len(c.values) > 1):
-                for group in groups:
+                for group in ['row', 'column', 'cluster']:
                     possibles = copy(cell.values)
                     # check each neighbouring row, column, cluster to see if
                     # cell has unique value do this by removing all values that
@@ -239,4 +244,3 @@ def tests():
 
 if __name__ == "__main__":
     tests()
-
