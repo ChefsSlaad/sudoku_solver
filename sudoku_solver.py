@@ -1,6 +1,5 @@
 from copy import copy, deepcopy
 
-
 class sudokuCell:
 
     # pos is noted as "A2" = 1st row , 2nd value
@@ -67,7 +66,7 @@ class sudokutable:
 
     def __getitem__(self, pos):
         if type(pos) is str:
-            return list(a for a in self if a.pos == pos)[0]
+            return [a for a in self if a.pos == pos][0]
         elif type(pos) is int:
             return self.cells[pos]
 
@@ -77,12 +76,12 @@ class sudokutable:
         i = 0
         for r in range(9):
             if r == 0:
-                result+= '  012 345 678' + '\n'
+                result+= '  123 456 789' + '\n'
             if r%3 == 0:
                 result += '\n' # inserts the blank line after every 3 rows
             for c in range(9):
                 if c == 0:
-                    result += str(r)
+                    result += 'ABCDEFGHI'[r]
                 if c%3 == 0:
                     result += ' ' #insert the blank column after every 3 columns
                 result += self[i].__str__()
@@ -147,69 +146,80 @@ class sudokutable:
 
         return cell_strike and set_strike
 
-    def uniques(self):
-        ''' loop through all unsolved cells untill either the sudoku has been
-            solved or no new certainties can be found.
-            the main loop of this function goes through all unsolved cells and
-            tries to find a situation where a value appears only once.
-            eg, take the following row
-            {1}, {2,3}, {3,4,5}, {3,4,5}, {3,4,5}, {6}, {7}, {8}, {9}
-            we know that the second cell can be either 2 or 3, but because 2
-            does not appear as an option in the other cells, we know that it
-            must appear in the second cell
-            the loop exits when either all cells have been solved or the main
-            loop has run an entire cycle without finding a new cell that can be
-            solved in this way
+    def find_unique(self, cell):
         '''
-        solved_new = True # solved_new is set to true so the main loop runs at least once
-        while solved_new and not self.solved():
-            solved_new = False
-            # this is the main loop
-            for cell in (c for c in self if len(c.values) > 1):
-                for group in ['row', 'column', 'cluster']:
-                    possibles = copy(cell.values)
-                    # check each neighbouring row, column, cluster to see if
-                    # cell has unique value do this by removing all values that
-                    # also appear in neighbouring cells.
-                    for c in self.get_set(cell, group):
-                        possibles -= c.values
-                    if len(possibles) == 1: # cell has one unique possible
-#                        print (cell.detailed(), 'possibles', possibles)
-                        # because set_value returns true on succes, solved_new
-                        # is true and the loop can run again.
-                        solved_new = self.set_value(cell, list(possibles)[0])
-                        break # exit the loop and continue with the next cell
-        return self.solved()
+        check if a cell is unsolved and try to find if a value only appears once
+        eg, take the following row
+        {1}, {2,3}, {3,4,5}, {3,4,5}, {3,4,5}, {6}, {7}, {8}, {9}
+        we know that the second cell can be either 2 or 3, but because 2
+        does not appear as an option in the other cells, we know that it
+        must appear in the second cell
+        '''
+        if len(cell.values) == 1: return False # allready unique, no new solution found
 
+        # check all cells that the cell forms a group with and remove the
+        # possible values from the set possibles. If the only value left is
+        # a unique value, set that as the new value for that cell
+        for g in ('row', 'column', 'cluster'):
+            possibles = copy(cell.values)
+            for c in self.get_set(cell, group = g):
+                possibles -= c.values
+            if len(possibles) == 1:
+                return self.set_value(cell, list(possibles)[0])
+        return False
+
+    def find_next_unique(self):
+        '''
+        loop through cells untill a new cell is found with unique value
+        and return that cell
+        '''
+        for cell in (c for c in self if len(c.values) > 1):
+            if self.find_unique(cell):
+                return cell
+#            print('finished uniques, run', i)
+        return None
+
+    def uniques(self):
+        '''
+        loop through all unsolved cells untill either the sudoku has been
+        solved or no new certainties can be found.
+
+        the loop exits when either all cells have been solved or the main
+        loop has run an entire cycle without finding a new cell that can be
+        solved in this way
+        '''
+        while True:
+            if self.find_next_unique() == None:
+                break
+
+
+    def guess(self):
+        '''
+        find the cell with the minimum number of possible values and try
+        each in turn. If the sudoku can be solved with that solution,
+        enter it and return that cell.
+        '''
+        if self.solved(): return
+        min_length = min(len(c.values) for c in self if len(c.values) > 1)
+        for cell in (c for c in self if len(c.values) == min_length):
+            for v in cell.values:
+#                print('testing cell {} with value {}'.format(cell.pos, v))
+                copyself = deepcopy(self)
+                copyself.set_value(copyself[cell.pos], v)
+                copyself.uniques()
+                if copyself.solved():
+                    self.set_value(cell, v)
+                    return cell
 
     def solve(self):
-        '''solve calls uniques. ith  and then tries guessing
+        '''solve calls uniques and then tries guessing
         '''
-        if self.uniques():
-            return True
-        min_length = min (len(c.values) for c in self if len(c.values) > 1)
-        for cell in (c for c in self if len(c.values) == min_length):
-                for v in cell.values:
-                    print('testing value {} for cell {}'.format(v, cell.pos))
-                    copyself = deepcopy(self)
-                    copyself.set_value(copyself[cell.pos], v)
-                    copyself.uniques()
-                    if copyself.solved():
-                        self.set_value(cell, v)
-                        self.uniques()
-                        return True
-                    else: copyself.seek()
-        return False
+        while not self.solved():
+            self.uniques()
+            self.guess()
 
     def solved(self):
         return all(len(c.values)==1 for c in self)
-
-#    def solve(self):
-#        i = 0
-#        self.uniques()
-#        i += 1
-#        print('solved in {} moves'.format(i))
-
 
 def tests():
 
@@ -226,6 +236,7 @@ def tests():
     table2.parse(puzzle2)
     table3.parse(puzzle3)
 
+
     table1.solve()
     print('the solved table 1')
     print(table1)
@@ -239,6 +250,13 @@ def tests():
     table3.solve()
     print(table3)
 
+def test1():
+    puzzle1 = ".4.17...6......9..3..8..4152.4.38..9.........7..59.2.3418..6..7..3......5...81.3."
+    table1 = sudokutable()
+    table1.parse(puzzle1)
+
+    table1.solve()
+    print(table1)
 #    for c in (ce for ce in table2 if len(ce.values) > 1):
 #        print(c.detailed())
 
