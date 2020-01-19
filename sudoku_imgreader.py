@@ -1,8 +1,6 @@
 import numpy as np
+import os
 import cv2 as cv
-from statistics import mean
-import pytesseract
-from PIL import Image
 
 
 # https://stackoverflow.com/questions/59182827/how-to-get-the-cells-of-a-sudoku-grid-with-opencv
@@ -19,37 +17,33 @@ class sudoku_image:
 
     def __init__(self, image = None):
         self.original =       cv.imread(image)
-        self.image =          cv.GaussianBlur(self.original, (5, 5), 0)
-        self.mask  =          None # the mask we will use to show only the relevant bits
+        self.image =          cv.GaussianBlur(self.original, (5, 5), 0) # blur image to remove imperfections and make it easier to convert
         self.result =         None # the final output, in greyscale
         self.contour =        None # the four cardinal points of the sudoku
-        self.res_rgb =        None # the final output, in rgb
 
         # populate the above parameters
         self.__pre_processing__()
         self.__process_img__()
-        self.grid_point_img = cv.bitwise_and(self.__find_verticals__(),self.__find_horizontals__())
-        self.warped_grid =    self.__find_gridpoints__(self.grid_point_img)
-        self.cell_images = self.__restore_warp__()
-
-
-
 
     def __pre_processing__(self):
-        img =           cv.GaussianBlur(self.original, (5, 5), 0) #blur img to remove noise
-        gray =          cv.cvtColor(img, cv.COLOR_BGR2GRAY) # convert to greyscale for easy processing
-        self.mask =     np.zeros((gray.shape), np.uint8) # create a complely black mask the same size as the image
+        '''
+        pre-processing  mask all parts of the image that are not a sudoku and
+        sets self.result to that Value
+        forthermore, it calculates the cardinal points of the sodoku and returns
+        those as self.contour
+        '''
+
+        gray =          cv.cvtColor(self.image, cv.COLOR_BGR2GRAY) # convert to greyscale for easy processing
+        mask =          np.zeros((gray.shape), np.uint8) # create a complely black mask the same size as the image
         kernel1 =       cv.getStructuringElement(cv.MORPH_ELLIPSE, (11,11))
 
         close =         cv.morphologyEx(gray,cv.MORPH_CLOSE, kernel1)
         div =           np.float32(gray)/(close)
         image =         np.uint8(cv.normalize(div, div, 0, 255, cv.NORM_MINMAX)) # normalise the image to remove extreme shadows
-        self.res_rgb =  cv.cvtColor(image, cv.COLOR_GRAY2BGR)
 
         # find the outline of the sudoku
         thresh =        cv.adaptiveThreshold(image,255,0,1,19,2)
         contour, _ =    cv.findContours(thresh, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
-
 
         # find the largest contour in the set of all contours
         max_area = 0
@@ -67,17 +61,28 @@ class sudoku_image:
 
         self.contour = self.__order_winding__(cont_pnts)
 
-        cv.drawContours(self.mask,[best_cnt],0,255,-1)
-        cv.drawContours(self.mask,[best_cnt],0,0,2)
+        cv.drawContours(mask,[best_cnt],0,255,-1)
+        cv.drawContours(mask,[best_cnt],0,0,2)
 
-        self.result = cv.bitwise_and(image, self.mask)
+        self.result = cv.bitwise_and(image, mask)
 
     def __process_img__(self):
-        pass
 
-    def __find_verticals__(self):
+        self.warped_grid =    self.__find_gridpoints__(self.find_aprox_gridpoints())
+        self.cell_images = self.__restore_warp__()
+
+    def find_aprox_gridpoints(self):
+        # detect the grid in the puzzle. a gridline is an aproximately straight
+        # line that has a much larger width component than a height
+        # component (or vice versa). The ratio should be at least 1:5
+
+        # the function first looks for all the vertical gridlines and then the
+        # horizontal gridlines.
+
+        # finally it combines both to arrive at the final set of gridpoints
+
+        ### verticals ###
         kernelx = cv.getStructuringElement(cv.MORPH_RECT,(2,10))
-
         dx = cv.Sobel(self.result, cv.CV_16S,1,0)
         dx = cv.convertScaleAbs(dx)
         cv.normalize(dx,dx,0,255,cv.NORM_MINMAX)
@@ -92,10 +97,9 @@ class sudoku_image:
             else:
                 cv.drawContours(close,[cnt],0,0,-1)
         close = cv.morphologyEx(close,cv.MORPH_CLOSE,None,iterations = 2)
-        return close.copy()
+        verticals = close.copy()
 
-    def __find_horizontals__(self):
-
+        ### horizontals ###
         kernely = cv.getStructuringElement(cv.MORPH_RECT,(10,2))
         dy = cv.Sobel(self.result, cv.CV_16S,0,2)
         dy = cv.convertScaleAbs(dy)
@@ -110,9 +114,11 @@ class sudoku_image:
                 cv.drawContours(close,[cnt],0,255,-1)
             else:
                 cv.drawContours(close,[cnt],0,0,-1)
-
         close = cv.morphologyEx(close,cv.MORPH_DILATE,None,iterations = 2)
-        return close.copy()
+        horizontals = close.copy()
+
+        ### join the two images to get the gridpoints ###
+        return cv.bitwise_and(verticals,horizontals)
 
     def __find_gridpoints__(self, grid_point_img):
 
@@ -161,6 +167,8 @@ class sudoku_image:
         return grid_array.reshape((10,10,2))
 
     def __find_closest_dist__(self, gridpoints, point):
+        # find the cosest point in an array of gridpoints to another point
+        # using the least squares method.
         closest_dist = float('inf')
         closest_gp = None
         for gp in gridpoints:
@@ -171,13 +179,14 @@ class sudoku_image:
         return closest_gp, closest_dist
 
     def __restore_warp__(self):
+        # unwarp a sudoku cell and retusn an array of cells that can be easily
+        # compined to create a new image
+
+
         #size is the smallest dimension of the sudoku devided by 9
         cell_size = int(min( (max(self.contour[:,0])-min(self.contour[:,0]))//9,
-                    (max(self.contour[:,1])-min(self.contour[:,1]))//9))
-
+                             (max(self.contour[:,1])-min(self.contour[:,1]))//9))
 #        print('cell_size =', cell_size)
-
-        output = np.zeros((cell_size*9,cell_size*9,3),"float32")
 
         result_cell = np.array([[0,0],
                                 [cell_size-1,0],
@@ -224,6 +233,19 @@ class sudoku_image:
         M =      cv.getPerspectiveTransform(original, result)
         return   cv.warpPerspective(image, M, (width, height))
 
+    def add_cell_number(self, id, value):
+        cell = self.cell_images[id]
+        font = cv.FONT_HERSHEY_SIMPLEX
+        hight = 2.5
+        color = (0,255,0) # Green
+        thickness = 9
+
+        textsize = cv.getTextSize(value, font, hight, thickness)
+        center = ((cell.shape[0] - textsize[0][0])// 2,
+                  (cell.shape[1] + textsize[0][1]) // 2)
+
+        cv.putText(cell, value, center, font, hight, color, thickness)
+
     def show_image(self, images = None, scaling = 0.3):
         if images == None:
             images = self.cell_images
@@ -243,29 +265,29 @@ class sudoku_image:
         cv.destroyAllWindows()
 
     def cells_to_numbers(self, images = None):
+        '''
+        take a processed sudoku image and perform OCR on it to find the cells
+        that contain a number. output a string that can be read using sudoku_image
+        lib.
+
+        '''
         if images == None:
             images = self.cell_images
 
         #load and create the model
-        path = '/home/marc/projects/sudoku_solver/sudoku_images/'
         sampleData = 'generalsamples.data'
         responseData = 'generalresponses.data'
 
         sudoku_numbers = []
 
-        samples = np.loadtxt(path+sampleData,np.float32)
-        responses = np.loadtxt(path+responseData,np.float32)
+        samples = np.loadtxt(sampleData,np.float32)
+        responses = np.loadtxt(responseData,np.float32)
         responses = responses.reshape((responses.size,1))
 
         model = cv.ml.KNearest_create()
         model.train(samples, cv.ml.ROW_SAMPLE, responses)
 
         for i, img in enumerate(images):
-            #if no number is found, use '.' (to mark an empty cell)
-#            cv.imshow('image', img)
-#            cv.waitKey(0)
-#            cv.destroyAllWindows()
-
             string = '.'
 
             # pre-processing
@@ -289,35 +311,19 @@ class sudoku_image:
                     retval, results, neigh_resp, dists = model.findNearest(roismall, k = 1)
                     string = str(int((results[0][0])))
 
-                    cv.rectangle(img, (x,y), (x+w, y+h),(0,255,0), 3)
-#                    cv.imshow('image', img)
-#                    cv.waitKey(0)
-#                    cv.destroyAllWindows()
-
-            print('cell', i, 'value', string)
-
             sudoku_numbers.append(string)
-        print(''.join(sudoku_numbers))
+        return ''.join(sudoku_numbers)
 
 def scale_img(image, pct):
+    '''return an image resized by x percent'''
     return cv.resize(image, (int(image.shape[1]*pct), int(image.shape[0]*pct)))
-
-def pretty_print(ugly_array):
-    ys,xs,d = ugly_array.shape
-    for y in range(ys):
-        print_str = ''
-        for x in range(xs):
-            item = ugly_array[y,x]
-            print_str += '[{:>4},{:>4}] '.format(item[0],item[1])
-        print(print_str)
 
 def test_image(image):
     sudoku = sudoku_image(image)
-#    for cell in sudoku.cell_images:
-#        cv.imshow('cell', cell)
-#        cv.waitKey(0)
-#        cv.destroyAllWindows()
-    sudoku.cells_to_numbers()
+    print(sudoku.cells_to_numbers())
+    for i, cell in enumerate(sudoku.cell_images):
+        sudoku.add_cell_number(i, str(i))
+
     sudoku.show_image()
 
 def loop_images():
@@ -331,22 +337,5 @@ def loop_images():
         test_image(file_str)
 
 
-def exportcells():
-    import os
-    path = '/home/marc/projects/sudoku_solver/sudoku_images/'
-    cellPath = '/home/marc/projects/sudoku_solver/sudoku_images/cell_images/'
-    files = (f for f in os.listdir(path) if f.endswith('.jpg'))
-
-    for file in files:
-        print('processing', file)
-        s = sudoku_image(path+file)
-        f_name = file[:-4]
-        for i, img in enumerate(s.cell_images):
-            filename = '{}cell{:0>2}.jpg'.format(f_name, i)
-            cv.imwrite(cellPath+filename,img)
-
-
 if __name__ == '__main__':
     loop_images()
-#    exportcells()
-#    train_digits()

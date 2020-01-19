@@ -6,8 +6,6 @@ from sudoku_imgreader import sudoku_image
 
 def classify_digits(path = None, sampleData = None, responseData = None, imagesData = None):
 
-
-
     if path == None:
         path = '/home/marc/projects/sudoku_solver/sudoku_images/'
     if responseData == None:

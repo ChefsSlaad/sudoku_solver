@@ -3,12 +3,14 @@ from copy import copy, deepcopy
 class sudokuCell:
 
     # pos is noted as "A2" = 1st row , 2nd value
-    def __init__(self, pos ):
+    def __init__(self, pos):
         self.pos = pos
+        self.id = id
+        self.solved = False
         self.row = "ABCDEFGHI".index(pos[0])
         self.column = int(pos[1])-1
         self.values = {1,2,3,4,5,6,7,8,9}
-
+        self.id = (self.row*9) + self.column
         self.cluster = self.column//3 + 3*(self.row//3)
 
     def __str__(self):
@@ -18,9 +20,13 @@ class sudokuCell:
             value = str(list(self.values)[0])
         return value
 
+    def value(self):
+        if len(self.values) == 1:
+            return list(self.values)[0]
+
     def detailed(self):
-        result = "cell: {p} (row {r}, col {c}, clust {cluster}) values: {v}"
-        return result.format(v = self.values, p = self.pos,
+        result = "cell: {p} (id {i}, row {r}, col {c}, clust {cluster}) solvede {s} values: {v}"
+        return result.format(v = self.values, p = self.pos, i = self.id, s=self.solved,
                              r = self.row, c = self.column, cluster = self.cluster)
 
     def strike(self, p):
@@ -50,7 +56,7 @@ class sudokutable:
     #
     # set of 81 cells
 
-    def __init__(self, rows = "ABCDEFGHI", cols = "123456789"):
+    def __init__(self, tabel = None, rows = "ABCDEFGHI", cols = "123456789"):
         """
         Initiate the table. create a 9x9 grid and populate each cell
         with a set of {1-9}.
@@ -61,6 +67,8 @@ class sudokutable:
         for r in rows:
             for c in cols:
                 self.cells.append(sudokuCell(r+c))
+        if not table == None
+            self.parse(table)
 
     def __iter__(self): return iter(self.cells)
 
@@ -108,9 +116,8 @@ class sudokutable:
         return result
 
     def parse(self, grid):
-        '''easy way to open a sudoku table. parse will read a string of sudoku
-           values and set those values within an emply table. all non-digits and
-           periods are ignored. Note that
+        '''Parse will read a string of sudoku values and set those values within
+           an emply table. all non-digits and periods are ignored. Note that
                 .4.17...6
                 ......9..
                 3..8..415
@@ -143,8 +150,10 @@ class sudokutable:
         remaining.discard(value)
         set_strike = all( c.strike(value) for c in self.get_set(cell))
         cell_strike = all(cell.strike(v) for v in remaining)
+        if set_strike and cell_strike:
+            cell.solved = True
 
-        return cell_strike and set_strike
+        return cell.solved
 
     def find_unique(self, cell):
         '''
@@ -155,8 +164,11 @@ class sudokutable:
         does not appear as an option in the other cells, we know that it
         must appear in the second cell
         '''
-        if len(cell.values) == 1: return False # allready unique, no new solution found
+        if cell.solved:
+            return False # allready unique, no new solution found
 
+        elif len(cell.values) == 1:
+            return self.set_value(cell, list(cell.values)[0])
         # check all cells that the cell forms a group with and remove the
         # possible values from the set possibles. If the only value left is
         # a unique value, set that as the new value for that cell
@@ -173,25 +185,10 @@ class sudokutable:
         loop through cells untill a new cell is found with unique value
         and return that cell
         '''
-        for cell in (c for c in self if len(c.values) > 1):
+        for cell in self:
             if self.find_unique(cell):
                 return cell
-#            print('finished uniques, run', i)
         return None
-
-    def uniques(self):
-        '''
-        loop through all unsolved cells untill either the sudoku has been
-        solved or no new certainties can be found.
-
-        the loop exits when either all cells have been solved or the main
-        loop has run an entire cycle without finding a new cell that can be
-        solved in this way
-        '''
-        while True:
-            if self.find_next_unique() == None:
-                break
-
 
     def guess(self):
         '''
@@ -199,66 +196,77 @@ class sudokutable:
         each in turn. If the sudoku can be solved with that solution,
         enter it and return that cell.
         '''
-        if self.solved(): return
-        min_length = min(len(c.values) for c in self if len(c.values) > 1)
-        for cell in (c for c in self if len(c.values) == min_length):
+        if self.solved(): return None
+        unsolved_cells = sorted((c for c in self if len(c.values) > 1),
+                            key=lambda  cell: len(cell.values))
+#        print(list((c.pos, c.values) for c in unsolved_cells))
+        for cell in unsolved_cells:
             for v in cell.values:
-#                print('testing cell {} with value {}'.format(cell.pos, v))
                 copyself = deepcopy(self)
                 copyself.set_value(copyself[cell.pos], v)
-                copyself.uniques()
+                copyself.solve(False)
                 if copyself.solved():
                     self.set_value(cell, v)
                     return cell
+        return None
 
-    def solve(self):
-        '''solve calls uniques and then tries guessing
+    def solve_next(self, guess = True):
         '''
-        while not self.solved():
-            self.uniques()
-            self.guess()
+        search for a unique cell. if none can be found try to guess a value.
+        loop through all unsolved cells untill and either the sudoku has been
+        solved or no new certainties can be found.
+        the loop exits when either all cells have been solved or the main
+        loop has run an entire cycle without finding a new cell that can be
+        solved in this way
+        '''
+        if not self.solved():
+            unique = self.find_next_unique()
+            if unique:
+                return unique
+            elif guess:
+                return self.guess()
+        return None
+
+    def solve(self, guess = True):
+        '''
+        solve tries to solve the entire puzzle in one go. It exits if no new
+        solution can be found (i.e. the puzzle cannot be solved)
+        '''
+        run = True
+        while run and not self.solved():
+            run = self.solve_next(guess)
 
     def solved(self):
-        return all(len(c.values)==1 for c in self)
+        '''return True if all cells have been solved, False otherwise'''
+        return all(c.solved for c in self)
+
 
 def tests():
-
-    puzzle1 = ".4.17...6......9..3..8..4152.4.38..9.........7..59.2.3418..6..7..3......5...81.3."
-
-    puzzle2 = "..1....9...6.95..4.8.....21.....4..2...518...5..7.....12.....7.3..67.2...7....5.."
-
-    puzzle3 = ".....5..8...2..43...649...7.9..3.5.2.7.....8.1.3.8..9.8...437...25..1...7..9....."
-    table1 = sudokutable()
-    table2 = sudokutable()
-    table3 = sudokutable()
-
-    table1.parse(puzzle1)
-    table2.parse(puzzle2)
-    table3.parse(puzzle3)
-
-
-    table1.solve()
-    print('the solved table 1')
-    print(table1)
-
-
-    print('this is table 2')
-    table2.solve()
-    print(table2)
-
-    print('this is table 3')
-    table3.solve()
-    print(table3)
+    puzzles = [".4.17...6......9..3..8..4152.4.38..9.........7..59.2.3418..6..7..3......5...81.3.",
+               "..1....9...6.95..4.8.....21.....4..2...518...5..7.....12.....7.3..67.2...7....5..",
+               ".....5..8...2..43...649...7.9..3.5.2.7.....8.1.3.8..9.8...437...25..1...7..9.....",
+               ".9..8....24.3...1......53...2..7.1..4..1.6..2..1.3..9...56......6...4.87....2..5.",
+               "42....7..6..1.........5.8.6.1.2.7.....2...9.....8.9.4.2.9.6.........1..2..1....58"
+               ]
+    for puzzle in puzzles:
+        table = sudokutable()
+        table.parse(puzzle)
+        table.solve()
+        print(table)
 
 def test1():
-    puzzle1 = ".4.17...6......9..3..8..4152.4.38..9.........7..59.2.3418..6..7..3......5...81.3."
-    table1 = sudokutable()
-    table1.parse(puzzle1)
+#    puzzle = "..1....9...6.95..4.8.....21.....4..2...518...5..7.....12.....7.3..67.2...7....5.."
+    puzzle = "42....7..6..1.........5.8.6.1.2.7.....2...9.....8.9.4.2.9.6.........1..2..1....58"
 
-    table1.solve()
-    print(table1)
-#    for c in (ce for ce in table2 if len(ce.values) > 1):
-#        print(c.detailed())
+    table = sudokutable()
+    table.parse(puzzle)
+    while not table.solved():
+        cell = table.solve_next()
+#        input('found {} with value {}'.format(cell.pos, list(cell.values)[0]))
+
+    print(table)
+
 
 if __name__ == "__main__":
     tests()
+#    test1()
