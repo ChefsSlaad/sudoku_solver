@@ -23,7 +23,7 @@ with images:
     solve_sudoku('sudoku_images/sudoku000.jpg')
 
 
-##next step: 
+## next step: 
 * create a simple web interface so that an image captured with a camera can be immediately solved and returned
     
 
