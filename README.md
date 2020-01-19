@@ -23,14 +23,15 @@ with images:
     solve_sudoku('sudoku_images/sudoku000.jpg')
 
 
-next step: 
-    * create a simple web interface so that an image captured with a camera can be immediately solved and returned
+##next step: 
+* create a simple web interface so that an image captured with a camera can be immediately solved and returned
     
 
 
 
-credits:  http://norvig.com/sudoku.html 
-          https://stackoverflow.com/questions/59182827/how-to-get-the-cells-of-a-sudoku-grid-with-opencv
-          https://stackoverflow.com/questions/10196198/how-to-remove-convexity-defects-in-a-sudoku-square
-          https://www.pyimagesearch.com/2014/08/25/4-point-opencv-getperspective-transform-example/
+## credits: 
+* http://norvig.com/sudoku.html 
+* https://stackoverflow.com/questions/59182827/how-to-get-the-cells-of-a-sudoku-grid-with-opencv
+* https://stackoverflow.com/questions/10196198/how-to-remove-convexity-defects-in-a-sudoku-square
+* https://www.pyimagesearch.com/2014/08/25/4-point-opencv-getperspective-transform-example/
 
