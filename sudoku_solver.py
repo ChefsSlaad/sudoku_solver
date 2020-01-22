@@ -56,7 +56,7 @@ class sudokutable:
     #
     # set of 81 cells
 
-    def __init__(self, tabel = None, rows = "ABCDEFGHI", cols = "123456789"):
+    def __init__(self, table = None, rows = "ABCDEFGHI", cols = "123456789"):
         """
         Initiate the table. create a 9x9 grid and populate each cell
         with a set of {1-9}.
@@ -67,7 +67,7 @@ class sudokutable:
         for r in rows:
             for c in cols:
                 self.cells.append(sudokuCell(r+c))
-        if not table == None
+        if not table == None:
             self.parse(table)
 
     def __iter__(self): return iter(self.cells)
