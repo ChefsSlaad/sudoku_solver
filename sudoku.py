@@ -8,11 +8,11 @@ def solve_sudoku(file):
     numbers = sudoku_pic.cells_to_numbers()
     puzzle = sudoku_solver.sudokutable()
     puzzle.parse(numbers)
-    sudoku_pic.show_image()
+#    sudoku_pic.show_image()
     while not puzzle.solved():
         cell = puzzle.solve_next()
         sudoku_pic.add_cell_number(cell.id, str(cell.value()))
-    sudoku_pic.show_image()
+#    sudoku_pic.show_image()
 
 
 def main():
